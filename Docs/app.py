@@ -1,59 +1,25 @@
-# --------------------------------------------
-# Imports at the top - PyShiny EXPRESS VERSION
-# --------------------------------------------
-
-# From shiny, import just reactive and render
-from shiny import reactive, render
-
-# From shiny.express, import just ui and inputs if needed
-from shiny.express import ui
-
+#Packaging imports
+import plotly.express as px
+import seaborn as sb
+import palmerpenguins as pp
+import shiny
+from shiny.express import input, render, ui
+from shiny import reactive
+from shinywidgets import render_plotly
 import random
 from datetime import datetime
 from collections import deque
 import pandas as pd
-import plotly.express as px
 from shinywidgets import render_plotly
 from scipy import stats
 
-# --------------------------------------------
-# Import icons as you like
-# --------------------------------------------
 
-# https://fontawesome.com/v4/cheatsheet/
-from faicons import icon_svg
-
-# --------------------------------------------
-# Shiny EXPRESS VERSION
-# --------------------------------------------
-
-# --------------------------------------------
-# First, set a constant UPDATE INTERVAL for all live data
-# Constants are usually defined in uppercase letters
-# Use a type hint to make it clear that it's an integer (: int)
-# --------------------------------------------
-
+#-------#
+#-------#
 UPDATE_INTERVAL_SECS: int = 3
-
-# --------------------------------------------
-# Initialize a REACTIVE VALUE with a common data structure
-# The reactive value is used to store state (information)
-# Used by all the display components that show this live data.
-# This reactive value is a wrapper around a DEQUE of readings
-# --------------------------------------------
 
 DEQUE_SIZE: int = 5
 reactive_value_wrapper = reactive.value(deque(maxlen=DEQUE_SIZE))
-
-# --------------------------------------------
-# Initialize a REACTIVE CALC that all display components can call
-# to get the latest data and display it.
-# The calculation is invalidated every UPDATE_INTERVAL_SECS
-# to trigger updates.
-# It returns a tuple with everything needed to display the data.
-# Very easy to expand or modify.
-# --------------------------------------------
-
 
 @reactive.calc()
 def reactive_calc_combined():
@@ -83,140 +49,76 @@ def reactive_calc_combined():
 
 
 
+p_df = pp.load_penguins()
 
-# Define the Shiny UI Page layout
-# Call the ui.page_opts() function
-# Set title to a string in quotes that will appear at the top
-# Set fillable to True to use the whole page width for the UI
-ui.page_opts(title="PyShiny Express: Live Data Example", fillable=True)
+#Adding reactive block for global reactive functions - I am retarded and I hate this
+#There are issues with PyShiny and filtering a data frame with more than one filter - need to figure out later
+@reactive.calc
+def filtered_data():
+    if input.radio() == "Yes":
+        filtered_df_species = p_df[p_df["species"].isin(input.check())]
+        return filtered_df_species
+    else:
+        filtered_df = p_df
+        return filtered_df
 
-# Sidebar is typically used for user interaction/information
-# Note the with statement to create the sidebar followed by a colon
-# Everything in the sidebar is indented consistently
-with ui.sidebar(open="open"):
-    ui.update_dark_mode(mode="dark")
+#Page options
+ui.page_opts(title="Palmer Penguins Exploration", fillable=True)
 
-    ui.h2("Antarctic Explorer", class_="text-center")
-    ui.p(
-        "A demonstration of real-time temperature readings in Antarctica.",
-        class_="text-center",
-    )
-    ui.hr()
-    ui.h6("Links:")
-    ui.a(
-        "GitHub Source",
-        href="https://github.com/JSellinger/cintel-05-cintel/blob/main/dashboard/app.py",
-        target="_blank",
-    )
-    ui.a(
-        "GitHub App",
-        href="https://github.com/JSellinger/cintel-05-cintel",
-        target="_blank",
-    )
-    ui.a("PyShiny", href="https://shiny.posit.co/py/", target="_blank")
-    ui.a(
-        "PyShiny Express",
-        href="hhttps://shiny.posit.co/blog/posts/shiny-express/",
-        target="_blank",
-    )
-
-# In Shiny Express, everything not in the sidebar is in the main panel
-
-with ui.layout_columns():
-    with ui.value_box(
-        showcase=icon_svg("sun"),
-        theme="bg-gradient-blue-purple",
-    ):
-
-        "Current Temperature"
-
-        @render.text
-        def display_temp():
-            """Get the latest reading and return a temperature string"""
-            deque_snapshot, df, latest_dictionary_entry, temp = reactive_calc_combined()
-            return f"{latest_dictionary_entry['temp']} C"
-
-        "warmer than usual"
-
-  
-
-    with ui.card(full_screen=True):
-        ui.card_header("Current Date and Time")
-
-        @render.text
-        def display_time():
-            """Get the latest reading and return a timestamp string"""
-            deque_snapshot, df, latest_dictionary_entry, temp = reactive_calc_combined()
-            return f"{latest_dictionary_entry['timestamp']}"
-
-
-#with ui.card(full_screen=True, min_height="40%"):
-with ui.card(full_screen=True):
-    ui.card_header("Most Recent Readings")
-
-    @render.data_frame
-    def display_df():
-        """Get the latest reading and return a dataframe with current readings"""
-        deque_snapshot, df, latest_dictionary_entry, temp = reactive_calc_combined()
-        pd.set_option('display.width', None)        # Use maximum width
-        return render.DataGrid( df,width="100%")
-
-with ui.card():
-    ui.card_header("Chart with Current Trend")
-
-    @render_plotly
-    def display_plot():
-        # Fetch from the reactive calc function
-        deque_snapshot, df, latest_dictionary_entry, temp = reactive_calc_combined()
-
-        # Ensure the DataFrame is not empty before plotting
-        if not df.empty:
-            # Convert the 'timestamp' column to datetime for better plotting
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
-
-            # Create scatter plot for readings
-            # pass in the df, the name of the x column, the name of the y column,
-            # and more
-        
-            fig = px.scatter(df,
-            x="timestamp",
-            y="temp",
-            title="Temperature Readings with Regression Line",
-            labels={"temp": "Temperature (°C)", "timestamp": "Time"},
-            color_discrete_sequence=["blue"] )
-            
-            # Linear regression - we need to get a list of the
-            # Independent variable x values (time) and the
-            # Dependent variable y values (temp)
-            # then, it's pretty easy using scipy.stats.linregress()
-
-            # For x let's generate a sequence of integers from 0 to len(df)
-            sequence = range(len(df))
-            x_vals = list(sequence)
-            y_vals = df["temp"]
-
-            slope, intercept, r_value, p_value, std_err = stats.linregress(x_vals, y_vals)
-            df['best_fit_line'] = [slope * x + intercept for x in x_vals]
-
-            # Add the regression line to the figure
-            fig.add_scatter(x=df["timestamp"], y=df['best_fit_line'], mode='lines', name='Regression Line')
-
-            # Update layout as needed to customize further
-            fig.update_layout(xaxis_title="Time",yaxis_title="Temperature (°C)")
-
-        return fig
-
-    
-with ui.layout_columns():
-    archive = pd.DataFrame()
-    
+#Sidebar layout
+with ui.sidebar(bg = "#808080"):
+    ui.h1("Settings and Selections")
+    "You can select settings and interact with the data graphs through this sidebar. The link to the Git repo is below:"
+    #Git repo link
+    ui.a("Github", href="https://github.com/JSellinger", target="_blank")
+    #General Settings Card
     with ui.card():
-        ui.card_header("Archived Data")
+        ui.card_header("General Settings")
+        ui.input_dark_mode()
+        ui.input_radio_buttons("radio","Filter Data Frame", ["Yes","No"])
+    #Selection Settings for Graphs
+    with ui.card():
+        ui.card_header("Graph Interaction")
+        #Check Box
+        ui.input_checkbox_group("check", "Species for Data Grid/Table", ["Adelie", "Gentoo", "Chinstrap"])
+
+#Function Block for Main Layout
+
+#Main Layout Column
+"Graphs and Data Visualization"
+with ui.layout_columns():
+
+    #It took me awhile to figure out what exactly the reactive.calc was doing but I figured it out.
+    #The reactive.calc function is simply turning it into a special return value that we are supposed to be returning in all our other functions that work with other react decorators and functions - this was not explained very well
+    #This means that we have to filter the data before we graph it though - which means it would change everything?
+    #Reactive Calc Function
+    @render.text
+    def display_time():
+        """Get the latest reading and return a timestamp string"""
+        deque_snapshot, df, latest_dictionary_entry, temp = reactive_calc_combined()
+        return f"{latest_dictionary_entry['timestamp']}"
+        
+    #Data Table
+    with ui.card():
+        ui.card_header("Data Table")
         @render.data_frame
-        def display_archive():
-            """Creating an archive data frame"""
-            deque_snapshot, df, latest_dictionary_entry, temp = reactive_calc_combined()
-            new_df = pd.DataFrame()
-            new_df = new_df._append(latest_dictionary_entry, ignore_index = True)
-            pd.set_option('display.width', None)        # Use maximum width
-            return render.DataGrid(new_df,width="100%")
+        def table_frame():
+            return render.DataTable(filtered_data())
+    #Data Grid
+    with ui.card():
+        ui.card_header("Data Grid")
+        @render.data_frame
+        def table_grid():
+            return render.DataGrid(filtered_data())
+    #Histogram Plotly
+    with ui.card():
+        ui.card_header("Plotly Histogram")
+        @render_plotly
+        def plotly_hist():
+            return px.histogram(filtered_data(), y= "species", nbins = 330)
+    #Scatterplot
+    with ui.card():
+        ui.card_header("Scatterplot")
+        @render_plotly
+        def scatter_plot():
+            return px.scatter(filtered_data(), x="body_mass_g", y="flipper_length_mm", color="species")
