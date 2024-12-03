@@ -1,1 +1,13 @@
-
+plotly.express
+seaborn
+palmerpenguins
+shiny
+shiny.express
+shiny
+shinywidgets
+random
+datetime
+collections
+pandas
+shinywidgets
+scipy
